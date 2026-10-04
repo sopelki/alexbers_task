@@ -37,7 +37,6 @@ func main() {
 		fmt.Printf("\n--- Step #%d ---\n", i)
 
 		html := doRequest(data)
-
 		fmt.Println(html)
 
 		// if strings.Contains(html, "токен") || strings.Contains(html, "token") {
@@ -46,35 +45,39 @@ func main() {
 		// 	break
 		// }
 
-		nextData := RequestData{
-			Method:      "GET",
-			Cookies:     map[string]string{"user": userToken},
-			Headers:     make(map[string]string),
-			Form:        make(map[string]string),
-			Files:       make(map[string]string),
-			QueryParams: make(map[string]string),
-		}
-
-		if strings.Contains(html, "POST") ||
-			strings.Contains(html, "файл") ||
-			strings.Contains(html, "форм") {
-			nextData.Method = "POST"
-		}
-
-		re := regexp.MustCompile(`(?:<code>|<a href=")(/[^"<]*)`)
-		if match := re.FindStringSubmatch(html); len(match) > 0 {
-			nextData.Path = match[1]
-		}
-
-		nextData.Headers = parseTable(html, "следующие заголовки:", nextData.Headers)
-		nextData.Cookies = parseTable(html, "выставлены cookie:", nextData.Cookies)
-		nextData.Form = parseTable(html, "данные формы:", nextData.Form)
-		nextData.Files = parseTable(html, "(использовать кодировку UTF8 без BOM):", nextData.Files)
-		nextData.QueryParams = parseTable(html, " параметры запроса, указанные в таблице:", nextData.QueryParams)
-
-		data = nextData
+		data = makeNextData(html)
 		fmt.Printf("Next: %s %s\n", data.Method, data.Path)
 	}
+}
+
+func makeNextData(html string) RequestData {
+	nextData := RequestData{
+		Method:      "GET",
+		Cookies:     map[string]string{"user": userToken},
+		Headers:     make(map[string]string),
+		Form:        make(map[string]string),
+		Files:       make(map[string]string),
+		QueryParams: make(map[string]string),
+	}
+
+	if strings.Contains(html, "POST") ||
+		strings.Contains(html, "файл") ||
+		strings.Contains(html, "форм") {
+		nextData.Method = "POST"
+	}
+
+	re := regexp.MustCompile(`(?:<code>|<a href=")(/[^"<]*)`)
+	if match := re.FindStringSubmatch(html); len(match) > 0 {
+		nextData.Path = match[1]
+	}
+
+	nextData.Headers = parseTable(html, "следующие заголовки:", nextData.Headers)
+	nextData.Cookies = parseTable(html, "выставлены cookie:", nextData.Cookies)
+	nextData.Form = parseTable(html, "данные формы:", nextData.Form)
+	nextData.Files = parseTable(html, "(использовать кодировку UTF8 без BOM):", nextData.Files)
+	nextData.QueryParams = parseTable(html, " параметры запроса, указанные в таблице:", nextData.QueryParams)
+
+	return nextData
 }
 
 func parseTable(html, sectionName string, target map[string]string) map[string]string {
@@ -103,67 +106,86 @@ func doRequest(data RequestData) string {
 	}
 	defer conn.Close()
 
-	if len(data.QueryParams) > 0 {
-		params := url.Values{}
-		for key, value := range data.QueryParams {
-			params.Set(key, value)
-		}
-		data.Path += "?" + params.Encode()
-	}
+	fullPath := buildPath(data.Path, data.QueryParams)
+	body, contentType := buildBody(data)
+	headerPart := buildHeaders(data, fullPath, len(body), contentType)
 
-	var body []byte
-	contentType := ""
-
-	if data.Method == "POST" {
-		if len(data.Files) > 0 {
-			boundary := "-----------qwertyuiop123456789"
-			contentType = "multipart/form-data; boundary=" + boundary
-			var buffer bytes.Buffer
-			for name, content := range data.Files {
-				fmt.Fprintf(&buffer, "--%s\r\n", boundary)
-				fmt.Fprintf(&buffer, "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n", name)
-				fmt.Fprintf(&buffer, "Content-Type: text/plain\r\n\r\n%s\r\n", content)
-			}
-			fmt.Fprintf(&buffer, "--%s--\r\n", boundary)
-			body = buffer.Bytes()
-		} else {
-			contentType = "application/x-www-form-urlencoded"
-			values := url.Values{}
-			for key, value := range data.Form {
-				values.Set(key, value)
-			}
-			body = []byte(values.Encode())
-		}
-	}
-
-	var buffer bytes.Buffer
-	fmt.Fprintf(&buffer, "%s %s HTTP/1.1\r\n", data.Method, data.Path)
-	fmt.Fprintf(&buffer, "Host: %s\r\n", baseURL)
-
-	for key, value := range data.Headers {
-		fmt.Fprintf(&buffer, "%s: %s\r\n", key, value)
-	}
-
-	if len(data.Cookies) > 0 {
-		fmt.Fprintf(&buffer, "Cookie: ")
-		var cookieList []string
-		for key, value := range data.Cookies {
-			cookieList = append(cookieList, fmt.Sprintf("%s=%s", key, value))
-		}
-		fmt.Fprintf(&buffer, "%s\r\n", strings.Join(cookieList, "; "))
-	}
-
-	if len(body) > 0 {
-		fmt.Fprintf(&buffer, "Content-Type: %s\r\n", contentType)
-		fmt.Fprintf(&buffer, "Content-Length: %d\r\n", len(body))
-	}
-	fmt.Fprintf(&buffer, "Connection: close\r\n\r\n")
-
-	conn.Write(buffer.Bytes())
+	conn.Write(headerPart)
 	if len(body) > 0 {
 		conn.Write(body)
 	}
 
 	response, _ := io.ReadAll(conn)
 	return string(response)
+}
+
+func buildPath(path string, queryParams map[string]string) string {
+	if len(queryParams) == 0 {
+		return path
+	}
+	params := url.Values{}
+	for key, value := range queryParams {
+		params.Set(key, value)
+	}
+	return path + "?" + params.Encode()
+}
+
+func buildBody(data RequestData) (body []byte, contentType string) {
+	if data.Method != "POST" {
+		return nil, ""
+	}
+
+	if len(data.Files) > 0 {
+		const boundary = "-----------qwertyuiop123456789"
+		var buffer bytes.Buffer
+		for name, content := range data.Files {
+			fmt.Fprintf(&buffer, "--%s\r\n", boundary)
+			fmt.Fprintf(&buffer, "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n", name)
+			fmt.Fprintf(&buffer, "Content-Type: text/plain\r\n\r\n%s\r\n", content)
+		}
+		fmt.Fprintf(&buffer, "--%s--\r\n", boundary)
+
+		body = buffer.Bytes()
+		contentType = "multipart/form-data; boundary=" + boundary
+		return
+	}
+
+	if len(data.Form) > 0 {
+		values := url.Values{}
+		for k, v := range data.Form {
+			values.Set(k, v)
+		}
+
+		body = []byte(values.Encode())
+		contentType = "application/x-www-form-urlencoded"
+		return
+	}
+
+	return nil, ""
+}
+
+func buildHeaders(data RequestData, path string, bodyLen int, contentType string) []byte {
+	var buffer bytes.Buffer
+	fmt.Fprintf(&buffer, "%s %s HTTP/1.1\r\n", data.Method, path)
+	fmt.Fprintf(&buffer, "Host: %s\r\n", baseURL)
+
+	for key, values := range data.Headers {
+		fmt.Fprintf(&buffer, "%s: %s\r\n", key, values)
+	}
+
+	if len(data.Cookies) > 0 {
+		var cookies []string
+		for key, value := range data.Cookies {
+			cookies = append(cookies, fmt.Sprintf("%s=%s", key, value))
+		}
+		fmt.Fprintf(&buffer, "Cookie: %s\r\n", strings.Join(cookies, "; "))
+	}
+
+	if bodyLen > 0 {
+		fmt.Fprintf(&buffer, "Content-Type: %s\r\n", contentType)
+		fmt.Fprintf(&buffer, "Content-Length: %d\r\n", bodyLen)
+	}
+
+	fmt.Fprintf(&buffer, "Connection: close\r\n\r\n")
+	return buffer.Bytes()
 }
