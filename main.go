@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/url"
 	"regexp"
@@ -130,24 +131,35 @@ func buildPath(path string, queryParams map[string]string) string {
 	return path + "?" + params.Encode()
 }
 
-func buildBody(data RequestData) (body []byte, contentType string) {
+func buildBody(data RequestData) ([]byte, string) {
 	if data.Method != "POST" {
 		return nil, ""
 	}
 
 	if len(data.Files) > 0 {
-		const boundary = "-----------qwertyuiop123456789"
-		var buffer bytes.Buffer
-		for name, content := range data.Files {
-			fmt.Fprintf(&buffer, "--%s\r\n", boundary)
-			fmt.Fprintf(&buffer, "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n", name)
-			fmt.Fprintf(&buffer, "Content-Type: text/plain\r\n\r\n%s\r\n", content)
-		}
-		fmt.Fprintf(&buffer, "--%s--\r\n", boundary)
 
-		body = buffer.Bytes()
-		contentType = "multipart/form-data; boundary=" + boundary
-		return
+		// const boundary = "-----------qwertyuiop123456789"
+		// var buffer bytes.Buffer
+		// for name, content := range data.Files {
+		// 	fmt.Fprintf(&buffer, "--%s\r\n", boundary)
+		// 	fmt.Fprintf(&buffer, "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n", name)
+		// 	fmt.Fprintf(&buffer, "Content-Type: text/plain\r\n\r\n%s\r\n", content)
+		// }
+		// fmt.Fprintf(&buffer, "--%s--\r\n", boundary)
+		// return buffer.Bytes(), "multipart/form-data; boundary=" + boundary
+
+		var buffer bytes.Buffer
+		writer := multipart.NewWriter(&buffer)
+		for name, content := range data.Files {
+			part, err := writer.CreateFormFile("file", name)
+			if err != nil {
+				continue
+			}
+			part.Write([]byte(content))
+		}
+
+		writer.Close()
+		return buffer.Bytes(), writer.FormDataContentType()
 	}
 
 	if len(data.Form) > 0 {
@@ -156,9 +168,7 @@ func buildBody(data RequestData) (body []byte, contentType string) {
 			values.Set(k, v)
 		}
 
-		body = []byte(values.Encode())
-		contentType = "application/x-www-form-urlencoded"
-		return
+		return []byte(values.Encode()), "application/x-www-form-urlencoded"
 	}
 
 	return nil, ""
