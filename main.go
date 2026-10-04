@@ -39,7 +39,7 @@ func main() {
 		fmt.Printf("\n--- Step #%d ---\n", i)
 
 		html := doRequest(data)
-		fmt.Printf("\n[Server response]\n\n%s\n", html)
+		// fmt.Printf("\n[Server response]\n\n%s\n", html)
 
 		if strings.Contains(html, "ключ") {
 			fmt.Printf("\n[Succes]\n\n%s\n", html)
@@ -47,7 +47,7 @@ func main() {
 		}
 
 		data = makeNextData(html)
-		fmt.Printf("\n\n[Next]\n%s %s\n", data.Method, data.Path)
+		fmt.Printf("\n[Next] %s %s\n", data.Method, data.Path)
 		time.Sleep(delay * time.Millisecond)
 	}
 }
