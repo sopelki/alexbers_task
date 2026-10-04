@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/url"
 	"regexp"
@@ -12,12 +13,9 @@ import (
 )
 
 const (
-	baseURL    = "hw1.alexbers.com"
-	userToken  = "e238c3c3730304c53a49f7ca0c04ce63"
-	tries      = 1000
-	delay      = 200
-	deadline   = 20
-	retryDelay = 3
+	baseURL   = "hw1.alexbers.com"
+	userToken = "e238c3c3730304c53a49f7ca0c04ce63"
+	delay     = 200
 )
 
 type RequestData struct {
@@ -37,22 +35,14 @@ func main() {
 		Cookies: map[string]string{"user": userToken},
 	}
 
-	for i := 1; i <= tries; i++ {
+	for i := 1; ; i++ {
 		fmt.Printf("\n--- Step #%d ---\n", i)
 
 		html := doRequest(data)
-
-		if html == "" {
-			fmt.Printf("\n[Error]\nEmpty `html`\n")
-			i--
-			time.Sleep(retryDelay * time.Second)
-			continue
-		}
-
 		fmt.Printf("\n[Server response]\n\n%s\n", html)
 
-		if strings.Contains(html, "токен") || strings.Contains(html, "token") {
-			fmt.Printf("\n[Succes]\nresponse:\n%s\n", html)
+		if strings.Contains(html, "ключ") {
+			fmt.Printf("\n[Succes]\n\n%s\n", html)
 			break
 		}
 
@@ -87,7 +77,7 @@ func makeNextData(html string) RequestData {
 	nextData.Cookies = parseTable(html, "выставлены cookie:", nextData.Cookies)
 	nextData.Form = parseTable(html, "данные формы:", nextData.Form)
 	nextData.Files = parseTable(html, "Имя файла", nextData.Files)
-	nextData.QueryParams = parseTable(html, " параметры запроса, указанные в таблице:", nextData.QueryParams)
+	nextData.QueryParams = parseTable(html, "параметры запроса, указанные в таблице:", nextData.QueryParams)
 
 	return nextData
 }
@@ -99,8 +89,8 @@ func parseTable(html, sectionName string, target map[string]string) map[string]s
 	}
 
 	section := html[index:]
-	if endIdx := strings.Index(section, "</table>"); endIdx != -1 {
-		section = section[:endIdx]
+	if endIndex := strings.Index(section, "</table>"); endIndex != -1 {
+		section = section[:endIndex]
 	}
 
 	re := regexp.MustCompile(`(?s)<tr>\s*<td><code>(.*?)</code></td>\s*<td><code>(.*?)</code></td>\s*</tr>`)
@@ -118,40 +108,17 @@ func doRequest(data RequestData) string {
 	}
 	defer conn.Close()
 
-	conn.SetDeadline(time.Now().Add(deadline * time.Second))
-
 	fullPath := buildPath(data.Path, data.QueryParams)
 	body, contentType := buildBody(data)
 	headerPart := buildHeaders(data, fullPath, len(body), contentType)
 
-	fmt.Printf("\n[Request header]\n\n%s\n", headerPart)
 	conn.Write(headerPart)
 	if len(body) > 0 {
 		conn.Write(body)
-		fmt.Printf("\n[Request body]\n\n%s\n", body)
 	}
 
-	// response, err := io.ReadAll(conn)
-	// if err != nil {
-	// 	fmt.Printf("[Error]\n%v", err)
-	// }
-	// return string(response)
-
-	var response bytes.Buffer
-	buffer := make([]byte, 1024*4)
-	for {
-		n, err := conn.Read(buffer)
-		if n > 0 {
-			response.Write(buffer[:n])
-		}
-		if err != nil {
-			if err != io.EOF {
-				fmt.Printf("\n[Error]\n%s\n", err)
-			}
-			break
-		}
-	}
-	return response.String()
+	response, _ := io.ReadAll(conn)
+	return string(response)
 }
 
 func buildPath(path string, queryParams map[string]string) string {
@@ -171,34 +138,35 @@ func buildBody(data RequestData) ([]byte, string) {
 	}
 
 	if len(data.Files) > 0 {
-		const boundary = "-----------qwertyuiop123456789"
-		var buffer bytes.Buffer
-		for name, content := range data.Files {
-			fmt.Fprintf(&buffer, "--%s\r\n", boundary)
-			fmt.Fprintf(&buffer, "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n", name)
-			fmt.Fprintf(&buffer, "Content-Type: text/plain\r\n\r\n%s\r\n", content)
-		}
-		fmt.Fprintf(&buffer, "--%s--\r\n", boundary)
-		return buffer.Bytes(), "multipart/form-data; boundary=" + boundary
 
+		// const boundary = "-----------qwertyuiop123456789"
 		// var buffer bytes.Buffer
-		// writer := multipart.NewWriter(&buffer)
 		// for name, content := range data.Files {
-		// 	part, err := writer.CreateFormFile("file", name)
-		// 	if err != nil {
-		// 		continue
-		// 	}
-		// 	part.Write([]byte(content))
+		// 	fmt.Fprintf(&buffer, "--%s\r\n", boundary)
+		// 	fmt.Fprintf(&buffer, "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n", name)
+		// 	fmt.Fprintf(&buffer, "Content-Type: text/plain\r\n\r\n%s\r\n", content)
 		// }
+		// fmt.Fprintf(&buffer, "--%s--\r\n", boundary)
+		// return buffer.Bytes(), "multipart/form-data; boundary=" + boundary
 
-		// writer.Close()
-		// return buffer.Bytes(), writer.FormDataContentType()
+		var buffer bytes.Buffer
+		writer := multipart.NewWriter(&buffer)
+		for name, content := range data.Files {
+			part, err := writer.CreateFormFile("file", name)
+			if err != nil {
+				continue
+			}
+			part.Write([]byte(content))
+		}
+
+		writer.Close()
+		return buffer.Bytes(), writer.FormDataContentType()
 	}
 
 	if len(data.Form) > 0 {
 		values := url.Values{}
-		for k, v := range data.Form {
-			values.Set(k, v)
+		for key, value := range data.Form {
+			values.Set(key, value)
 		}
 
 		return []byte(values.Encode()), "application/x-www-form-urlencoded"
