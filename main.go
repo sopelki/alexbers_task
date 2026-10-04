@@ -112,9 +112,11 @@ func doRequest(data RequestData) string {
 	body, contentType := buildBody(data)
 	headerPart := buildHeaders(data, fullPath, len(body), contentType)
 
+	// fmt.Printf("\n[Request header]\n\n%s\n", headerPart)
 	conn.Write(headerPart)
 	if len(body) > 0 {
 		conn.Write(body)
+		// fmt.Printf("\n[Request body]\n\n%s\n", body)
 	}
 
 	response, _ := io.ReadAll(conn)
