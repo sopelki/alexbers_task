@@ -104,7 +104,8 @@ func parseTable(html, sectionName string, target map[string]string) map[string]s
 func doRequest(data RequestData) string {
 	conn, err := net.Dial("tcp", baseURL+":80")
 	if err != nil {
-		panic(err)
+		fmt.Printf("[Error] %v", err)
+		return ""
 	}
 	defer conn.Close()
 
