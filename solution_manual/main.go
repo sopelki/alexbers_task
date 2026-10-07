@@ -15,7 +15,7 @@ import (
 const (
 	baseURL   = "hw1.alexbers.com"
 	userToken = "e238c3c3730304c53a49f7ca0c04ce63"
-	delay     = 800
+	delay     = 200
 )
 
 type RequestData struct {
@@ -47,9 +47,8 @@ func main() {
 		}
 
 		data = makeNextData(html)
-		fmt.Printf("\n[Next] %s %s\n", data.Method, data.Path)
-		// fmt.Printf("\n[Next]\nMethod:\n%s\nPath:\n%s\nCookies:\n%s\nHeaders:\n%s\nForm:\n%s\nFiles:\n%s\nQueryParams:\n%s\n", data.Method, data.Path, data.Cookies, data.Headers,
-		//	data.Form, data.Files, data.QueryParams)
+		/// fmt.Printf("\n[Next]\nMethod:\n%s\nPath:\n%s\nCookies:\n%s\nHeaders:\n%s\nForm:\n%s\nFiles:\n%s\nQueryParams:\n%s\n", data.Method, data.Path, data.Cookies, data.Headers,
+		// 	data.Form, data.Files, data.QueryParams)
 		time.Sleep(delay * time.Millisecond)
 	}
 }

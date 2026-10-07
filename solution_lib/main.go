@@ -13,7 +13,7 @@ import (
 const (
 	baseURL   = "http://hw1.alexbers.com"
 	userToken = "e238c3c3730304c53a49f7ca0c04ce63"
-	delay     = 800
+	delay     = 200
 )
 
 type RequestData struct {
