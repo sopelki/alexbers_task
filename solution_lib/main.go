@@ -1,19 +1,17 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"io"
-	"mime/multipart"
-	"net"
-	"net/url"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/go-resty/resty/v2"
 )
 
 const (
-	baseURL   = "hw1.alexbers.com"
+	baseURL   = "http://hw1.alexbers.com"
 	userToken = "e238c3c3730304c53a49f7ca0c04ce63"
 	delay     = 200
 )
@@ -35,10 +33,12 @@ func main() {
 		Cookies: map[string]string{"user": userToken},
 	}
 
+	client := resty.New().SetBaseURL(baseURL)
+
 	for i := 1; ; i++ {
 		fmt.Printf("\n--- Step #%d ---\n", i)
 
-		html := doRequest(data)
+		html := doRequest(data, client)
 		// fmt.Printf("\n[Server response]\n\n%s\n", html)
 
 		if strings.Contains(html, "ключ") {
@@ -101,105 +101,48 @@ func parseTable(html, sectionName string, target map[string]string) map[string]s
 	return target
 }
 
-func doRequest(data RequestData) string {
-	conn, err := net.Dial("tcp", baseURL+":80")
+func doRequest(data RequestData, client *resty.Client) string {
+	cookies := make([]*http.Cookie, 0, len(data.Cookies))
+	for name, value := range data.Cookies {
+		cookies = append(cookies, &http.Cookie{Name: name, Value: value})
+	}
+
+	req := client.R().
+		SetQueryParams(data.QueryParams).
+		SetHeaders(data.Headers).
+		SetCookies(cookies)
+
+	if data.Method == "POST" {
+		if len(data.Files) > 0 {
+			fields := make([]*resty.MultipartField, 0, len(data.Files))
+			for name, content := range data.Files {
+				fields = append(fields, &resty.MultipartField{
+					Param:       "files",
+					FileName:    name,
+					ContentType: "text/plain",
+					Reader:      strings.NewReader(content),
+				})
+			}
+			req.SetMultipartFields(fields...)
+		} else if len(data.Form) > 0 {
+			req.SetFormData(data.Form)
+		}
+	}
+
+	var response *resty.Response
+	var err error
+
+	switch data.Method {
+	case "GET":
+		response, err = req.Get(data.Path)
+	case "POST":
+		response, err = req.Post(data.Path)
+	}
+
 	if err != nil {
-		fmt.Printf("[Error] %v", err)
+		fmt.Printf("\n[Error] %v\n", err)
 		return ""
 	}
-	defer conn.Close()
 
-	fullPath := buildPath(data.Path, data.QueryParams)
-	body, contentType := buildBody(data)
-	headerPart := buildHeaders(data, fullPath, len(body), contentType)
-
-	// fmt.Printf("\n[Request header]\n\n%s\n", headerPart)
-	conn.Write(headerPart)
-	if len(body) > 0 {
-		conn.Write(body)
-		// fmt.Printf("\n[Request body]\n\n%s\n", body)
-	}
-
-	response, _ := io.ReadAll(conn)
-	return string(response)
-}
-
-func buildPath(path string, queryParams map[string]string) string {
-	if len(queryParams) == 0 {
-		return path
-	}
-	params := url.Values{}
-	for key, value := range queryParams {
-		params.Set(key, value)
-	}
-	return path + "?" + params.Encode()
-}
-
-func buildBody(data RequestData) ([]byte, string) {
-	if data.Method != "POST" {
-		return nil, ""
-	}
-
-	if len(data.Files) > 0 {
-
-		// const boundary = "-----------qwertyuiop123456789"
-		// var buffer bytes.Buffer
-		// for name, content := range data.Files {
-		// 	fmt.Fprintf(&buffer, "--%s\r\n", boundary)
-		// 	fmt.Fprintf(&buffer, "Content-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n", name)
-		// 	fmt.Fprintf(&buffer, "Content-Type: text/plain\r\n\r\n%s\r\n", content)
-		// }
-		// fmt.Fprintf(&buffer, "--%s--\r\n", boundary)
-		// return buffer.Bytes(), "multipart/form-data; boundary=" + boundary
-
-		var buffer bytes.Buffer
-		writer := multipart.NewWriter(&buffer)
-		for name, content := range data.Files {
-			part, err := writer.CreateFormFile("file", name)
-			if err != nil {
-				continue
-			}
-			part.Write([]byte(content))
-		}
-
-		writer.Close()
-		return buffer.Bytes(), writer.FormDataContentType()
-	}
-
-	if len(data.Form) > 0 {
-		values := url.Values{}
-		for key, value := range data.Form {
-			values.Set(key, value)
-		}
-
-		return []byte(values.Encode()), "application/x-www-form-urlencoded"
-	}
-
-	return nil, ""
-}
-
-func buildHeaders(data RequestData, path string, bodyLen int, contentType string) []byte {
-	var buffer bytes.Buffer
-	fmt.Fprintf(&buffer, "%s %s HTTP/1.1\r\n", data.Method, path)
-	fmt.Fprintf(&buffer, "Host: %s\r\n", baseURL)
-
-	for key, values := range data.Headers {
-		fmt.Fprintf(&buffer, "%s: %s\r\n", key, values)
-	}
-
-	if len(data.Cookies) > 0 {
-		var cookies []string
-		for key, value := range data.Cookies {
-			cookies = append(cookies, fmt.Sprintf("%s=%s", key, value))
-		}
-		fmt.Fprintf(&buffer, "Cookie: %s\r\n", strings.Join(cookies, "; "))
-	}
-
-	if bodyLen > 0 {
-		fmt.Fprintf(&buffer, "Content-Type: %s\r\n", contentType)
-		fmt.Fprintf(&buffer, "Content-Length: %d\r\n", bodyLen)
-	}
-
-	fmt.Fprintf(&buffer, "Connection: close\r\n\r\n")
-	return buffer.Bytes()
+	return response.String()
 }

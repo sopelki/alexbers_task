@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	baseURL   = "hw1.alexbers.com"
+	baseURL   = "http://hw1.alexbers.com"
 	userToken = "e238c3c3730304c53a49f7ca0c04ce63"
 	delay     = 200
 )
