@@ -13,7 +13,7 @@ import (
 const (
 	baseURL   = "http://hw1.alexbers.com"
 	userToken = "e238c3c3730304c53a49f7ca0c04ce63"
-	delay     = 200
+	delay     = 800
 )
 
 type RequestData struct {
@@ -28,17 +28,20 @@ type RequestData struct {
 
 func main() {
 	data := RequestData{
-		Method:  "GET",
-		Path:    "/",
-		Cookies: map[string]string{"user": userToken},
+		Method: "GET",
+		Path:   "/",
 	}
 
-	client := resty.New().SetBaseURL(baseURL)
+	client := resty.New().
+		SetBaseURL(baseURL).
+		SetTimeout(0).
+		SetHeader("Connection", "close").
+		SetDebug(false)
 
 	for i := 1; ; i++ {
-		fmt.Printf("\n--- Step #%d ---\n", i)
-
 		html := doRequest(data, client)
+		fmt.Printf("\n--- Step #%d (%s) ---\n", i, getStepNumber(html))
+
 		// fmt.Printf("\n[Server response]\n\n%s\n", html)
 
 		if strings.Contains(html, "ключ") {
@@ -47,15 +50,25 @@ func main() {
 		}
 
 		data = makeNextData(html)
-		fmt.Printf("\n[Next] %s %s\n", data.Method, data.Path)
+		// fmt.Printf("\n[Next]\nMethod:\n%s\nPath:\n%s\nCookies:\n%s\nHeaders:\n%s\nForm:\n%s\nFiles:\n%s\nQueryParams:\n%s\n", data.Method, data.Path, data.Cookies, data.Headers,
+		// 	data.Form, data.Files, data.QueryParams)
 		time.Sleep(delay * time.Millisecond)
 	}
+}
+
+func getStepNumber(html string) string {
+	re := regexp.MustCompile(`Шаг\s*#(\d+)`)
+	match := re.FindStringSubmatch(html)
+	if len(match) > 1 {
+		return match[1]
+	}
+	return "?"
 }
 
 func makeNextData(html string) RequestData {
 	nextData := RequestData{
 		Method:      "GET",
-		Cookies:     map[string]string{"user": userToken},
+		Cookies:     make(map[string]string),
 		Headers:     make(map[string]string),
 		Form:        make(map[string]string),
 		Files:       make(map[string]string),
@@ -110,14 +123,19 @@ func doRequest(data RequestData, client *resty.Client) string {
 	req := client.R().
 		SetQueryParams(data.QueryParams).
 		SetHeaders(data.Headers).
-		SetCookies(cookies)
+		SetCookies(cookies).
+		SetHeader("Expect", "")
+
+	if _, ok := data.Cookies["user"]; !ok {
+		req.SetCookie(&http.Cookie{Name: "user", Value: userToken})
+	}
 
 	if data.Method == "POST" {
 		if len(data.Files) > 0 {
 			fields := make([]*resty.MultipartField, 0, len(data.Files))
 			for name, content := range data.Files {
 				fields = append(fields, &resty.MultipartField{
-					Param:       "files",
+					Param:       "file",
 					FileName:    name,
 					ContentType: "text/plain",
 					Reader:      strings.NewReader(content),
@@ -144,5 +162,6 @@ func doRequest(data RequestData, client *resty.Client) string {
 		return ""
 	}
 
+	// fmt.Print(req.RawRequest)
 	return response.String()
 }

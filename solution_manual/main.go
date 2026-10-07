@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	baseURL   = "http://hw1.alexbers.com"
+	baseURL   = "hw1.alexbers.com"
 	userToken = "e238c3c3730304c53a49f7ca0c04ce63"
-	delay     = 200
+	delay     = 800
 )
 
 type RequestData struct {
@@ -36,9 +36,9 @@ func main() {
 	}
 
 	for i := 1; ; i++ {
-		fmt.Printf("\n--- Step #%d ---\n", i)
-
 		html := doRequest(data)
+		fmt.Printf("\n--- Step #%d (%s) ---\n", i, getStepNumber(html))
+
 		// fmt.Printf("\n[Server response]\n\n%s\n", html)
 
 		if strings.Contains(html, "ключ") {
@@ -48,8 +48,19 @@ func main() {
 
 		data = makeNextData(html)
 		fmt.Printf("\n[Next] %s %s\n", data.Method, data.Path)
+		// fmt.Printf("\n[Next]\nMethod:\n%s\nPath:\n%s\nCookies:\n%s\nHeaders:\n%s\nForm:\n%s\nFiles:\n%s\nQueryParams:\n%s\n", data.Method, data.Path, data.Cookies, data.Headers,
+		//	data.Form, data.Files, data.QueryParams)
 		time.Sleep(delay * time.Millisecond)
 	}
+}
+
+func getStepNumber(html string) string {
+	re := regexp.MustCompile(`Шаг\s*#(\d+)`)
+	match := re.FindStringSubmatch(html)
+	if len(match) > 1 {
+		return match[1]
+	}
+	return "?"
 }
 
 func makeNextData(html string) RequestData {
