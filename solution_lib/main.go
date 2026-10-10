@@ -13,7 +13,7 @@ import (
 const (
 	baseURL   = "http://hw1.alexbers.com"
 	userToken = "e238c3c3730304c53a49f7ca0c04ce63"
-	delay     = 800
+	delay     = 0
 )
 
 type RequestData struct {
@@ -28,7 +28,7 @@ type RequestData struct {
 
 var stepNumberRe = regexp.MustCompile(`Шаг\s*#(\d+)`)
 var tableRowRe = regexp.MustCompile(`(?s)<tr>\s*<td><code>(.*?)</code></td>\s*<td><code>(.*?)</code></td>\s*</tr>`)
-var keyRe = regexp.MustCompile(`ключ: (\S*)`)
+var keyRe = regexp.MustCompile(`ключ: <b><code>(\S*)</code></b>`)
 
 func main() {
 	data := RequestData{
