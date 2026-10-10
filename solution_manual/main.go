@@ -15,7 +15,7 @@ import (
 const (
 	baseURL   = "hw1.alexbers.com"
 	userToken = "e238c3c3730304c53a49f7ca0c04ce63"
-	delay     = 1000
+	delay     = 800
 )
 
 type RequestData struct {
@@ -43,9 +43,9 @@ func main() {
 		html := doRequest(data)
 		fmt.Printf("\nIteration: #%d\nStep:      #%s\n", i, getStepNumber(html))
 		// fmt.Printf("\n[Server response]\n\n%s\n", html)
-		
+
 		if strings.Contains(html, "ключ") {
-			fmt.Printf("\nKey: %s\n", html)
+			fmt.Printf("\nKey: %s\n", getKey(html))
 			break
 		}
 
@@ -54,6 +54,10 @@ func main() {
 		// 	data.Form, data.Files, data.QueryParams)
 		time.Sleep(delay * time.Millisecond)
 	}
+}
+
+func getKey(html string) string {
+	return keyRe.FindStringSubmatch(html)[1]
 }
 
 func getStepNumber(html string) string {
@@ -104,18 +108,17 @@ func parseTable(html, sectionName string, target map[string]string) map[string]s
 }
 
 func findSection(html, sectionName string) string {
-    index := strings.Index(html, sectionName)
-    if index == -1 {
-        return ""
-    }
-    section := html[index:]
-    endIndex := strings.Index(section, "</table>")
-    if endIndex == -1 {
-        return section
-    }
-    return section[:endIndex]
+	index := strings.Index(html, sectionName)
+	if index == -1 {
+		return ""
+	}
+	section := html[index:]
+	endIndex := strings.Index(section, "</table>")
+	if endIndex == -1 {
+		return section
+	}
+	return section[:endIndex]
 }
-
 
 func doRequest(data RequestData) string {
 	conn, err := net.Dial("tcp", baseURL+":80")

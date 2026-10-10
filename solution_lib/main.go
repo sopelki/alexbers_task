@@ -48,7 +48,7 @@ func main() {
 		// fmt.Printf("\n[Server response]\n\n%s\n", html)
 		
 		if strings.Contains(html, "ключ") {
-			fmt.Printf("\nKey: %s\n", html)
+			fmt.Printf("\nKey: %s\n", getKey(html))
 			break
 		}
 
@@ -56,6 +56,10 @@ func main() {
 		// fmt.Printf("\n[Next]\nMethod:\n%s\nPath:\n%s\nCookies:\n%s\nHeaders:\n%s\nForm:\n%s\nFiles:\n%s\nQueryParams:\n%s\n", data.Method, data.Path, data.Cookies, data.Headers, data.Form, data.Files, data.QueryParams)
 		time.Sleep(delay * time.Millisecond)
 	}
+}
+
+func getKey(html string) string {
+	return keyRe.FindStringSubmatch(html)[1]
 }
 
 func getStepNumber(html string) string {
