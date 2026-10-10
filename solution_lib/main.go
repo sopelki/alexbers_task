@@ -46,7 +46,7 @@ func main() {
 		html := doRequest(data, client)
 		fmt.Printf("\nIteration: #%d\nStep:      #%s\n", i, getStepNumber(html))
 		// fmt.Printf("\n[Server response]\n\n%s\n", html)
-		
+
 		if strings.Contains(html, "ключ") {
 			fmt.Printf("\nKey: %s\n", getKey(html))
 			break
