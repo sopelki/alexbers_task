@@ -15,7 +15,7 @@ import (
 const (
 	baseURL   = "hw1.alexbers.com"
 	userToken = "e238c3c3730304c53a49f7ca0c04ce63"
-	delay     = 200
+	delay     = 1000
 )
 
 type RequestData struct {
@@ -28,6 +28,10 @@ type RequestData struct {
 	QueryParams map[string]string
 }
 
+var stepNumberRe = regexp.MustCompile(`Шаг\s*#(\d+)`)
+var tableRowRe = regexp.MustCompile(`(?s)<tr>\s*<td><code>(.*?)</code></td>\s*<td><code>(.*?)</code></td>\s*</tr>`)
+var keyRe = regexp.MustCompile(`ключ: (\S*)`)
+
 func main() {
 	data := RequestData{
 		Method:  "GET",
@@ -37,25 +41,23 @@ func main() {
 
 	for i := 1; ; i++ {
 		html := doRequest(data)
-		fmt.Printf("\n--- Step #%d (%s) ---\n", i, getStepNumber(html))
-
+		fmt.Printf("\nIteration: #%d\nStep:      #%s\n", i, getStepNumber(html))
 		// fmt.Printf("\n[Server response]\n\n%s\n", html)
-
+		
 		if strings.Contains(html, "ключ") {
-			fmt.Printf("\n[Succes]\n\n%s\n", html)
+			fmt.Printf("\nKey: %s\n", html)
 			break
 		}
 
 		data = makeNextData(html)
-		/// fmt.Printf("\n[Next]\nMethod:\n%s\nPath:\n%s\nCookies:\n%s\nHeaders:\n%s\nForm:\n%s\nFiles:\n%s\nQueryParams:\n%s\n", data.Method, data.Path, data.Cookies, data.Headers,
+		// fmt.Printf("\n[Next]\nMethod:\n%s\nPath:\n%s\nCookies:\n%s\nHeaders:\n%s\nForm:\n%s\nFiles:\n%s\nQueryParams:\n%s\n", data.Method, data.Path, data.Cookies, data.Headers,
 		// 	data.Form, data.Files, data.QueryParams)
 		time.Sleep(delay * time.Millisecond)
 	}
 }
 
 func getStepNumber(html string) string {
-	re := regexp.MustCompile(`Шаг\s*#(\d+)`)
-	match := re.FindStringSubmatch(html)
+	match := stepNumberRe.FindStringSubmatch(html)
 	if len(match) > 1 {
 		return match[1]
 	}
@@ -93,23 +95,27 @@ func makeNextData(html string) RequestData {
 }
 
 func parseTable(html, sectionName string, target map[string]string) map[string]string {
-	index := strings.Index(html, sectionName)
-	if index == -1 {
-		return target
-	}
-
-	section := html[index:]
-	if endIndex := strings.Index(section, "</table>"); endIndex != -1 {
-		section = section[:endIndex]
-	}
-
-	re := regexp.MustCompile(`(?s)<tr>\s*<td><code>(.*?)</code></td>\s*<td><code>(.*?)</code></td>\s*</tr>`)
-	matches := re.FindAllStringSubmatch(section, -1)
+	section := findSection(html, sectionName)
+	matches := tableRowRe.FindAllStringSubmatch(section, -1)
 	for _, match := range matches {
 		target[match[1]] = match[2]
 	}
 	return target
 }
+
+func findSection(html, sectionName string) string {
+    index := strings.Index(html, sectionName)
+    if index == -1 {
+        return ""
+    }
+    section := html[index:]
+    endIndex := strings.Index(section, "</table>")
+    if endIndex == -1 {
+        return section
+    }
+    return section[:endIndex]
+}
+
 
 func doRequest(data RequestData) string {
 	conn, err := net.Dial("tcp", baseURL+":80")
